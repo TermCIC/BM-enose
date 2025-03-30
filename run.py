@@ -29,75 +29,80 @@ point_color = input().strip()
 # Check if the CSV file exists, create it if not
 if not os.path.exists(CSV_FILE):
     with open(CSV_FILE, 'w') as f:
-        f.write("GM102B_slope,GM302B_slope,GM502B_slope,GM702B_slope,"
-                "GM102B_mean,GM302B_mean,GM502B_mean,GM702B_mean,"
-                "GM102B_CV,GM302B_CV,GM502B_CV,GM702B_CV,color\n")
+        f.write("GM102B_rel,GM302B_rel,GM502B_rel,GM702B_rel,color\n")
+
+
+def send_command(ser, command):
+    """Sends a command to the serial device."""
+    try:
+        if ser and ser.is_open:
+            ser.write((command + '\n').encode())  # Ensure newline for command
+            print(f">>> Sent command: {command}")
+        else:
+            print("Serial port not open.")
+    except Exception as e:
+        print(f"Error sending command: {e}")
+
 
 def read_serial():
-    """Reads serial data, processes it into slopes, means, CVs, and writes to a CSV file."""
-    entry_count = 0  # Count the number of recorded entries
-
+    """Controls pumps, collects raw e-nose data, and saves baseline-subtracted values to CSV."""
     try:
         ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
-        time.sleep(2)  # Allow time for connection
+        time.sleep(2)
         print("Connected to Serial Port:", SERIAL_PORT)
-    except serial.SerialException as e:
-        print(f"Failed to connect: {e}")
-        stop_flag.set()  # Stop program if serial fails
-        return
 
-    while entry_count < MAX_ENTRIES and not stop_flag.is_set():  # Stop after 10 entries
-        try:
-            readings = { "GM102B": [], "GM302B": [], "GM502B": [], "GM702B": [] }
+        # Initial state: All pumps OFF
+        send_command(ser, "PUMP1 OFF")
+        send_command(ser, "PUMP2 OFF")
 
-            # Collect 15 valid readings
-            valid_count = 0
-            while valid_count < 15 and not stop_flag.is_set():
-                line = ser.readline().decode(errors='replace').strip()
-                values = line.split(',')
+        print("Step 1: Running control air (PUMP2 ON) for 60 seconds...")
+        send_command(ser, "PUMP2 ON")
+        time.sleep(60)
+        send_command(ser, "PUMP2 OFF")
 
-                if len(values) == 4 and all(v.replace('.', '', 1).isdigit() for v in values):
-                    values = list(map(float, values))  # Convert to float
-                    readings["GM102B"].append(values[0])
-                    readings["GM302B"].append(values[1])
-                    readings["GM502B"].append(values[2])
-                    readings["GM702B"].append(values[3])
-                    valid_count += 1  # Count only valid readings
+        print("Step 2: Running sample air (PUMP1 ON) for 60 seconds and collecting data...")
+        send_command(ser, "PUMP1 ON")
 
-                time.sleep(1)  # Small delay for stable readings
+        raw_readings = []  # To store all sensor readings (list of 4-element lists)
+        start_time = time.time()
 
-            # Compute medians every 3 values
-            slopes, means, cvs = [], [], []
-            for key in readings.keys():
-                medians = [np.median(readings[key][i:i+3]) for i in range(0, 15, 3)]
-                slope = np.polyfit(range(1, 6), medians, 1)[0] if len(medians) == 5 else 0
-                mean_val = np.mean(readings[key])  # Calculate mean
-                cv_val = np.std(readings[key]) / mean_val if mean_val != 0 else 0  # Calculate CV
+        while time.time() - start_time < 60 and not stop_flag.is_set():
+            line = ser.readline().decode(errors='replace').strip()
+            values = line.split(',')
 
-                slopes.append(slope)
-                means.append(mean_val)
-                cvs.append(cv_val)
+            if len(values) == 4 and all(v.replace('.', '', 1).isdigit() for v in values):
+                values = list(map(float, values))
+                raw_readings.append(values)
+                print(values)
+            time.sleep(1)
 
-            print(f"Saved entry {entry_count + 1}/{MAX_ENTRIES}: Slopes, Means, and CVs")
+        send_command(ser, "PUMP1 OFF")
 
-            # Save to buffer for PCA
-            data_buffer.append(slopes + means + cvs)
+        print("Step 3: Reset signal (PUMP2 ON) for 60 seconds...")
+        send_command(ser, "PUMP2 ON")
+        time.sleep(60)
+        send_command(ser, "PUMP2 OFF")
 
-            # Append to CSV file with color
+        # === Baseline-subtracted processing ===
+        if not raw_readings:
+            print("No valid readings received.")
+        else:
+            v0 = raw_readings[0]  # First sample = baseline
+            print(f"Baseline (V0): {v0}")
+
             with open(CSV_FILE, 'a') as f:
-                f.write(",".join(map(str, slopes + means + cvs)) + f",{point_color}\n")
+                for reading in raw_readings:
+                    diff = [v - b for v, b in zip(reading, v0)]
+                    f.write(",".join(map(str, diff)) + f",{point_color}\n")
 
-            entry_count += 1  # Increment entry count
+    except Exception as e:
+        print(f"Serial Read Error: {e}")
+    finally:
+        print("Cleaning up and closing serial port.")
+        ser.close()
+        stop_flag.set()
+        os._exit(0)
 
-        except Exception as e:
-            print(f"Serial Read Error: {e}")
-            break
-
-    # **Disconnect serial and exit the program properly**
-    print("Reached 10 entries, disconnecting serial and stopping program...")
-    ser.close()
-    stop_flag.set()  # Signal the PCA thread to stop
-    os._exit(0)  # Forcefully terminate the entire program
 
 def plot_pca():
     """Runs in the main thread to update PCA plot."""
@@ -114,11 +119,13 @@ def plot_pca():
             df.dropna(inplace=True)
 
             if len(df) > 2:
-                transformed_data = pca.fit_transform(df.iloc[:, :-1])  # Exclude color column
-                
+                transformed_data = pca.fit_transform(
+                    df.iloc[:, :-1])  # Exclude color column
+
                 # Plot points with color from CSV
                 ax.clear()
-                ax.scatter(transformed_data[:, 0], transformed_data[:, 1], c=df['color'], alpha=0.5)
+                ax.scatter(
+                    transformed_data[:, 0], transformed_data[:, 1], c=df['color'], alpha=0.5)
                 ax.set_xlabel('Principal Component 1')
                 ax.set_ylabel('Principal Component 2')
                 ax.set_title('Real-Time PCA of Gas Sensor Slopes & Means')
@@ -128,6 +135,7 @@ def plot_pca():
             print(f"PCA Plot Error: {e}")
 
     print("PCA thread stopped.")
+
 
 if __name__ == "__main__":
     # Start serial reading in a background thread
