@@ -366,7 +366,7 @@ if __name__ == "__main__":
     # 讓收集資料的程式跑在子執行緒
     capture_thread = threading.Thread(
         target=run_enose_capture_10min,
-        args=("MB_Durian_5", False),
+        args=("DM150425_1", False),
         daemon=True
     )
     capture_thread.start()
