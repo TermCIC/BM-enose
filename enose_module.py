@@ -340,7 +340,7 @@ def run_enose_capture_hourly(treatment_base_name="auto", record_control_air=Fals
 
 
 def run_enose_capture_10min(treatment_base_name="auto", record_control_air=False):
-    """Runs e-nose capture every hour with a timestamped treatment name."""
+    """Runs e-nose capture every 10 minutes with a timestamped treatment name."""
     try:
         while True:
             # Generate unique treatment name using timestamp
@@ -363,13 +363,16 @@ def run_enose_capture_10min(treatment_base_name="auto", record_control_air=False
 
 
 if __name__ == "__main__":
-    # 讓收集資料的程式跑在子執行緒
+    # Ask for treatment name once at the beginning
+    treatment_name = input("Enter the treatment name: ").strip()
+
+    # Start the data collection thread with the user-defined treatment name
     capture_thread = threading.Thread(
         target=run_enose_capture_10min,
-        args=("DM150425_1", False),
+        args=(treatment_name, False),
         daemon=True
     )
     capture_thread.start()
 
-    # 讓 PCA GUI plot 在主執行緒中執行（避免錯誤）
+    # Run PCA plot in main thread
     plot_pca()
