@@ -1,0 +1,43 @@
+Screen {
+    layout: horizontal;
+}
+
+#left_panel {
+    width: 2fr;
+    padding: 1;
+    border: round yellow;
+}
+
+#treatment_panel {
+    width: 1fr;
+    padding: 1;
+    border: round gray;
+}
+
+#right_panel {
+    width: 3fr;
+    border: round green;
+    align-horizontal: center;
+}
+
+#treatment_input, #run_input {
+    width: 100%;
+    border: heavy $accent;
+}
+
+#start_button, #pause_button, #cancel_button, #exit_button {
+    width: 100%;
+    margin-top: 0;
+}
+
+#reading_log {
+    height: 100%;
+    width: 100%;
+    overflow: auto;
+    scrollbar-color: gray;
+}
+
+#plot_box {
+    width: 95%;
+    height: 50%;
+}

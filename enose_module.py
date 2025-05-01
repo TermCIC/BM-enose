@@ -13,6 +13,8 @@ import matplotlib
 from matplotlib.lines import Line2D
 from sklearn.linear_model import LinearRegression
 from settings import find_working_port
+import platform
+import winsound
 
 cmap = plt.get_cmap('tab10')
 
@@ -33,6 +35,9 @@ stop_flag = threading.Event()
 
 # Start timestamp
 timestamp = time.time()
+
+# Global serial connection object
+ser = None
 
 # Check if the CSV file exists, create it if not
 if not os.path.exists(CONTROL_CSV_FILE):
@@ -67,6 +72,7 @@ def send_command(ser, command):
 
 
 def read_serial(treatment=None, record_control_air=False):
+    global ser
     # Ask user for treatment name
     if not treatment:
         print("Enter the treatment name: ")
@@ -319,57 +325,69 @@ def run_enose_capture(treatment_input=None, record_control_air=False):
     serial_thread.start()
 
 
-def run_enose_capture_hourly(treatment_base_name="auto", record_control_air=False):
-    """Runs e-nose capture every hour with a timestamped treatment name."""
-    try:
-        while True:
-            # Generate unique treatment name using timestamp
-            time_str = time.strftime("%Y%m%d_%H%M%S")
-            treatment_name = f"{treatment_base_name}_{time_str}"
-            print(f"\n>>> Starting new e-nose capture: {treatment_name}")
-
-            # Run one capture
-            run_enose_capture(treatment_input=treatment_name, record_control_air=False)
-
-            # Sleep for 1 hour
-            print("Waiting for 1 hour until next capture...")
-            time.sleep(3600)  # 3600 seconds = 1 hour
-
-    except KeyboardInterrupt:
-        print("\nHourly capture interrupted by user.")
-
-
-def run_enose_capture_10min(treatment_base_name="auto", record_control_air=False):
+def run_enose_capture_10min(treatment_base_name="auto", record_control_air=False, num_cycles=1):
     """Runs e-nose capture every 10 minutes with a timestamped treatment name."""
     try:
-        while True:
+        for cycle in range(num_cycles):
             # Generate unique treatment name using timestamp
             time_str = time.strftime("%Y%m%d_%H%M%S")
             treatment_name = f"{treatment_base_name}_{time_str}"
-            print(f"\n>>> Starting new e-nose capture: {treatment_name}")
+            print(f"\n>>> Starting capture {cycle + 1}/{num_cycles}: {treatment_name}")
 
             # Run one capture
-            run_enose_capture(treatment_input=treatment_name, record_control_air=False)
+            run_enose_capture(treatment_input=treatment_name, record_control_air=record_control_air)
 
-            # Countdown: wait 1 minute (60 seconds)
-            print("Waiting 10 minutes until next capture...")
-            for i in range(600, 0, -1):
-                print(f"Next capture in {i} seconds",
-                      end='\r')  # overwrite same line
+            # Wait for capture thread to finish before next round
+            while threading.active_count() > 2:  # 1 main + 1 PCA + capture thread
                 time.sleep(1)
 
+            # Countdown for next round (if not the last round)
+            if cycle < num_cycles - 1:
+                print("Waiting 10 minutes until next capture...")
+                for i in range(600, 0, -1):
+                    print(f"Next capture in {i} seconds", end='\r')
+                    time.sleep(1)
+
+        print(f"\n✅ Completed all {num_cycles} measurement(s) for: {treatment_base_name}")
+
     except KeyboardInterrupt:
-        print("\nHourly capture interrupted by user.")
+        print("\n⛔ Measurement interrupted by user.")
+
+    finally:
+        # Stop PCA plot thread and cleanup
+        stop_flag.set()
+        print("Stopping PCA plot and exiting...")
+        time.sleep(2)  # Allow PCA thread to exit gracefully
+        plt.close("all")
+        # Clean up serial connection
+        global ser
+        if ser and ser.is_open:
+            print("Closing serial port after all measurements.")
+            ser.close()
+        sys.exit(0)  # Graceful shutdown
+        # Play beep sound
+        try:
+            if platform.system() == "Windows":
+                winsound.Beep(1000, 500)  # frequency=1000Hz, duration=500ms
+            else:
+                print('\a')  # Terminal bell for macOS/Linux
+        except Exception as e:
+            print(f"Beep failed: {e}")
 
 
 if __name__ == "__main__":
-    # Ask for treatment name once at the beginning
+    # Prompt user for treatment base name and number of cycles
     treatment_name = input("Enter the treatment name: ").strip()
+    try:
+        num_cycles = int(input("How many times to measure (every 10 min)? ").strip())
+    except ValueError:
+        print("Invalid number of cycles. Defaulting to 1.")
+        num_cycles = 1
 
-    # Start the data collection thread with the user-defined treatment name
+    # Start the data collection thread
     capture_thread = threading.Thread(
         target=run_enose_capture_10min,
-        args=(treatment_name, False),
+        args=(treatment_name, False, num_cycles),
         daemon=True
     )
     capture_thread.start()
