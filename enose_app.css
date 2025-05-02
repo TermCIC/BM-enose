@@ -20,12 +20,12 @@ Screen {
     align-horizontal: center;
 }
 
-#treatment_input, #run_input {
+#treatment_input {
     width: 100%;
     border: heavy $accent;
 }
 
-#start_button, #pause_button, #cancel_button, #exit_button {
+#run_button, #pause_button, #cancel_button, #exit_button {
     width: 100%;
     margin-top: 0;
 }
@@ -38,6 +38,27 @@ Screen {
 }
 
 #plot_box {
-    width: 95%;
-    height: 50%;
+    border: round white;
+    padding: 1;
+}
+
+#plot {
+    height: 100%;
+    width: 100%;
+}
+
+#run_input_row {
+    width: 1fr;
+    height: auto;
+}
+
+#run_input {
+    width: 30;
+    border: heavy $accent;
+}
+
+#inc_button, #dec_button {
+    min-width: 9;
+    height: auto;
+    content-align: center middle;
 }

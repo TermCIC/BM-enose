@@ -50,13 +50,15 @@ class ENoseApp(App):
         with Horizontal():
             with Container(id="left_panel"):
                 yield Input(placeholder="Enter treatment name", id="treatment_input")
-                yield Input(placeholder="e.g. 3", id="run_input")
-                yield Button("Start Capture", id="start_button")
-                yield Button("Pause", id="pause_button")
+                with Horizontal(id="run_input_row"):
+                    yield Input(placeholder="e.g. 3", id="run_input")
+                    yield Button("+", id="inc_button")
+                    yield Button("-", id="dec_button")
+                yield Button("Start", id="run_button")
                 yield Button("Cancel", id="cancel_button")
                 yield Button("Exit", id="exit_button")
                 with Container(id="plot_box"):
-                    yield PlotWidget()
+                    yield PlotWidget(id="plot")
             with Container(id="treatment_panel"):
                 yield Static("Treatments will appear here...", id="treatment_list")
             with Container(id="right_panel"):
@@ -119,6 +121,8 @@ class ENoseApp(App):
         self.query_one("#right_panel").border_title = "Log"
         self.query_one("#treatment_input").border_title = "Treatment Name"
         self.query_one("#run_input").border_title = "Number of Runs"
+        self.query_one("#run_input", Input).value = "0"
+        self.query_one("#plot_box").border_title = "Principal Component Analysis"
         self.query_one("#treatment_panel").border_title = "Treatments"
         self.update_plot()
         
@@ -272,6 +276,15 @@ class ENoseApp(App):
 
             self.send_command(ser, "PUMP1 OFF")
             self.send_command(ser, "PUMP2 OFF")
+            run_input_widget = self.query_one("#run_input", Input)
+            try:
+                current_value = int(run_input_widget.value.strip())
+                if current_value > 1:
+                    run_input_widget.value = str(current_value - 1)
+                else:
+                    run_input_widget.value = "1"
+            except ValueError:
+                run_input_widget.value = "1"
 
         except Exception as e:
             log.write_line(f"Serial Read Error: {e}")
@@ -328,50 +341,68 @@ class ENoseApp(App):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         log = self.query_one("#reading_log", Log)
-        if event.button.id == "start_button":
-            treatment_input = self.query_one("#treatment_input", Input).value.strip()
-            run_input = self.query_one("#run_input", Input).value.strip()
+        run_button = self.query_one("#run_button", Button)
 
-            if treatment_input:
-                self.treatment_name = treatment_input
-                timestamp = time.time()
-            try:
-                self.run_count = int(run_input)
-            except ValueError:
-                self.run_count = 1
+        if event.button.id == "run_button":
+            if not self.reading_thread or not self.reading_thread.is_alive():
+                # START: Begin new capture
+                treatment_input = self.query_one("#treatment_input", Input).value.strip()
+                run_input = self.query_one("#run_input", Input).value.strip()
 
-            log.write_line(f"Starting e-nose with treatment: {self.treatment_name}, cycles: {self.run_count}")
+                if treatment_input:
+                    self.treatment_name = treatment_input
+                try:
+                    self.run_count = int(run_input)
+                except ValueError:
+                    self.run_count = 1
 
-            self.stop_flag.clear()
-            self.pause_flag.clear()
-            if self.reading_thread is None or not self.reading_thread.is_alive():
+                log.write_line(f"▶ Starting e-nose with treatment: {self.treatment_name}, cycles: {self.run_count}")
+                self.stop_flag.clear()
+                self.pause_flag.clear()
+                run_button.label = "Pause"
+
                 self.reading_thread = threading.Thread(
                     target=self.run_enose_capture,
-                    args=(self.treatment_name,
-                          False,
-                          self.run_count),
+                    args=(self.treatment_name, False, self.run_count),
                     daemon=True
                 )
                 self.reading_thread.start()
-                                            
-        elif event.button.id == "pause_button":
-            pause_button = self.query_one("#pause_button", Button)
-            if self.pause_flag.is_set():
-                self.pause_flag.clear()
-                pause_button.label = "Pause"
-                log.write_line("▶ Resumed readings.")
+
             else:
-                self.pause_flag.set()
-                pause_button.label = "Resume"
-                log.write_line("⏸ Paused readings.")
+                # TOGGLE: Pause or Resume
+                if self.pause_flag.is_set():
+                    self.pause_flag.clear()
+                    run_button.label = "Pause"
+                    log.write_line("▶ Resumed readings.")
+                else:
+                    self.pause_flag.set()
+                    run_button.label = "Resume"  # ← previously "Start"
+                    log.write_line("⏸ Paused readings.")
 
         elif event.button.id == "cancel_button":
             self.stop_flag.set()
             log.write_line("❌ Measurement schedule cancelled.")
+            self.query_one("#run_button", Button).label = "Start"
 
         elif event.button.id == "exit_button":
             log.write_line("👋 Exiting program...")
             self.exit()
+        
+        elif event.button.id == "inc_button":
+            run_input = self.query_one("#run_input", Input)
+            try:
+                val = int(run_input.value.strip() or "0")
+                run_input.value = str(val + 1)
+            except ValueError:
+                run_input.value = "1"
+
+        elif event.button.id == "dec_button":
+            run_input = self.query_one("#run_input", Input)
+            try:
+                val = int(run_input.value.strip() or "0")
+                run_input.value = str(max(1, val - 1))
+            except ValueError:
+                run_input.value = "1"
 
     def update_plot(self):
         shared_colors = [
@@ -474,6 +505,7 @@ class ENoseApp(App):
                     time.sleep(1)
         if not self.stop_flag.is_set():
             self.query_one("#reading_log", Log).write("✅ All cycles complete.")
+            self.query_one("#run_button", Button).label = "Start"
 
 if __name__ == "__main__":
     ENoseApp().run()
