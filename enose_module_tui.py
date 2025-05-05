@@ -54,9 +54,10 @@ class ENoseApp(App):
                     yield Input(placeholder="e.g. 3", id="run_input")
                     yield Button("+", id="inc_button")
                     yield Button("-", id="dec_button")
-                yield Button("Start", id="run_button")
-                yield Button("Cancel", id="cancel_button")
-                yield Button("Exit", id="exit_button")
+                with Horizontal(id="buttons_row"):
+                    yield Button("Start", id="run_button")
+                    yield Button("Cancel", id="cancel_button")
+                    yield Button("Exit", id="exit_button")
                 with Container(id="plot_box"):
                     yield PlotWidget(id="plot")
             with Container(id="treatment_panel"):

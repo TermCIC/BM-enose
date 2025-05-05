@@ -25,9 +25,11 @@ Screen {
     border: heavy $accent;
 }
 
-#run_button, #pause_button, #cancel_button, #exit_button {
-    width: 100%;
+#run_button, #cancel_button, #exit_button {
+    width: 25%;
     margin-top: 0;
+    min-width: 10;
+    height: auto;
 }
 
 #reading_log {
@@ -40,6 +42,7 @@ Screen {
 #plot_box {
     border: round white;
     padding: 1;
+    min-height: 60%;
 }
 
 #plot {
@@ -53,12 +56,12 @@ Screen {
 }
 
 #run_input {
-    width: 30;
+    width: 50%;
     border: heavy $accent;
 }
 
 #inc_button, #dec_button {
-    min-width: 9;
+    min-width: 5;
     height: auto;
     content-align: center middle;
 }
