@@ -3,7 +3,7 @@
         "port": {},
         "COM3": {
             "info_1": "Silicon Labs CP210x USB to UART Bridge (COM3)",
-            "info_2": "USB VID:PID=10C4:EA60 SER=0001 LOCATION=1-4",
+            "info_2": "USB VID:PID=10C4:EA60 SER=0001 LOCATION=1-4.2",
             "available": true
         },
         "COM4": {

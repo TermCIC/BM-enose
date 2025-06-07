@@ -1,0 +1,15 @@
+{
+    "port": {
+        "port": {},
+        "COM5": {
+            "info_1": "Standard Serial over Bluetooth link (COM5)",
+            "info_2": "BTHENUM\\{00001101-0000-1000-8000-00805F9B34FB}_LOCALMFG&005D\\7&27100622&0&84AC604E3D0F_C00000000",
+            "available": false
+        },
+        "COM4": {
+            "info_1": "Standard Serial over Bluetooth link (COM4)",
+            "info_2": "BTHENUM\\{00001101-0000-1000-8000-00805F9B34FB}_LOCALMFG&0000\\7&27100622&0&000000000000_00000000",
+            "available": false
+        }
+    }
+}

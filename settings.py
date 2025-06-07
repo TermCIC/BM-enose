@@ -6,9 +6,6 @@ import os
 
 # Settings
 PORT_FILE = 'port.json'
-sensor_list = [f"MQ{k}" for k in range(2, 10)] + ["MQ135"] + ["GM102B", "GM302B", "GM502B", "GM702B"]
-headings = ["Treatment", "Timestamp"] + sensor_list
-
 
 # Function to find the working COM port
 def find_working_port():

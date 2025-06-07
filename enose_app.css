@@ -4,14 +4,10 @@ Screen {
 
 #left_panel {
     width: 2fr;
-    padding: 1;
-    border: round yellow;
 }
 
-#treatment_panel {
+#middle_panel {
     width: 1fr;
-    padding: 1;
-    border: round gray;
 }
 
 #right_panel {
@@ -20,16 +16,68 @@ Screen {
     align-horizontal: center;
 }
 
-#treatment_input {
+#control_box {
     width: 100%;
+    border: round yellow;
+}
+
+#project_input_row, #treatment_input_row {
+    width: 1fr;
+    height: auto;
+}
+
+#project_input, #treatment_input {
+    width: 1fr;
     border: heavy $accent;
 }
 
-#run_button, #cancel_button, #exit_button {
-    width: 25%;
-    margin-top: 0;
-    min-width: 10;
+#confirm_project, #confirm_treatment {
+    min-width: 50%;
+    width: 50%;
     height: auto;
+}
+
+#run_input_row {
+    width: 1fr;
+    height: auto;
+}
+
+#run_input {
+    min-width: 25%;
+    width: 50%;
+    border: heavy $accent;
+    content-align: center middle;
+}
+
+#inc_button, #dec_button {
+    min-width: 25%;
+    height: auto;
+    content-align: center middle;
+}
+
+#buttons_row {
+    width: 100%;
+    height: auto;
+}
+
+#run_button, #cancel_button, #exit_button, #scan_button {
+    min-width: 25%;
+}
+
+#export_data_button {
+    min-width: 100%;
+}
+
+#project_box {
+    width: 1fr;
+    padding: 1;
+    border: round gray;
+}
+
+#treatment_box {
+    width: 1fr;
+    padding: 1;
+    border: round gray;
 }
 
 #reading_log {
@@ -50,18 +98,4 @@ Screen {
     width: 100%;
 }
 
-#run_input_row {
-    width: 1fr;
-    height: auto;
-}
 
-#run_input {
-    width: 50%;
-    border: heavy $accent;
-}
-
-#inc_button, #dec_button {
-    min-width: 5;
-    height: auto;
-    content-align: center middle;
-}
