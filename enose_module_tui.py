@@ -11,7 +11,6 @@ import serial.tools.list_ports
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sklearn.decomposition import PCA
-import csv
 import os
 import sys
 from pathlib import Path
@@ -171,7 +170,7 @@ class ENoseApp(App):
         self.query_one("#project_input").border_title = "Project Name"
         self.query_one("#treatment_input").border_title = "Treatment Name"
         self.query_one("#run_input").border_title = "Number of Runs"
-        self.query_one("#run_input").value = "0"
+        self.query_one("#run_input", Static).update("0")
         self.query_one("#plot_box").border_title = "Principal Component Analysis"
         self.query_one("#project_box").border_title = "Projects"
         self.query_one("#treatment_box").border_title = "Treatments"
@@ -216,6 +215,17 @@ class ENoseApp(App):
         log.write_line("Starting serial read...")
         global ser
         READING_CSV_FILE = PROJECTS_PATH / self.project_name / f"{treatment}_readings.csv"
+        # Check and create READING_CSV_FILE
+        if not os.path.exists(READING_CSV_FILE):
+            with open(READING_CSV_FILE, 'w') as f:
+                f.write(
+                    "GM102B_rel,GM302B_rel,GM502B_rel,GM702B_rel,temperature,humidity,treatment,timestamp,time\n"
+                )
+            log.write_line(f"✅ Created: {os.path.abspath(READING_CSV_FILE)}")
+        else:
+            log.write_line(f"📄 Exists: {os.path.abspath(READING_CSV_FILE)}")
+        
+        # Start serial connection
         try:
             def open_serial():
                 global ser
@@ -339,15 +349,6 @@ class ENoseApp(App):
 
             self.send_command(ser, "PUMP1 OFF")
             self.send_command(ser, "PUMP2 OFF")
-            run_input_widget = self.query_one("#run_input", Input)
-            try:
-                current_value = int(run_input_widget.value.strip())
-                if current_value > 1:
-                    run_input_widget.value = str(current_value - 1)
-                else:
-                    run_input_widget.value = "1"
-            except ValueError:
-                run_input_widget.value = "1"
 
         except Exception as e:
             log.write_line(f"Serial Read Error: {e}")
@@ -428,7 +429,6 @@ class ENoseApp(App):
                 
                 # START: Begin new capture
                 log.write_line(f"▶ Starting e-nose with the treatment name: {self.treatment_name} under the project: {self.project_name}, cycles: {self.run_count}")
-                self.run_count = 0
                 self.stop_flag.clear()
                 self.pause_flag.clear()
                 run_button.label = "Pause"
