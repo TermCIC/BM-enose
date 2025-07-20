@@ -5,7 +5,7 @@ a = Analysis(
     ['enose_module_tui.py'],
     pathex=[],
     binaries=[],
-    datas=[('settings.py', '.'), ('enose_app.css', '.'), ('enose_control_summary.csv', '.')],
+    datas=[('enose_app.css', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

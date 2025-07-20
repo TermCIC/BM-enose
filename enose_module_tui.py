@@ -18,10 +18,7 @@ import json
 import tkinter as tk
 from tkinter import filedialog
 
-if getattr(sys, 'frozen', False):
-    BASE_PATH = Path(sys._MEIPASS)
-else:
-    BASE_PATH = Path(__file__).parent
+BASE_PATH = Path(os.getcwd())
 
 # Ensure the settings file exists
 os.makedirs(BASE_PATH / "settings", exist_ok=True)
@@ -34,10 +31,36 @@ PROJECTS_PATH = BASE_PATH / "projects"
 # Settings
 PORT_FILE = SETTINGS_PATH / 'port.json'
 CONTROL_CSV_FILE = SETTINGS_PATH / 'enose_control_summary.csv'
-CORRECTION_CSV_FILE = SETTINGS_PATH / 'enose_correction_coefficients.csv'
+CALIBRATION_JSON_PATH = SETTINGS_PATH / "calibration.json"
+
+# Default colors
 shared_colors = [
             "red", "green", "blue", "yellow", "cyan", "magenta", "white", "black"
         ]
+
+# Default coefficients for sensors
+DEFAULT_COEFFICIENTS = {
+    "GM102B_mean": {
+        "a": 24.715408,
+        "b": -0.253605,
+        "intercept": -609.726756
+    },
+    "GM302B_mean": {
+        "a": 20.501747,
+        "b": 1.98757,
+        "intercept": -377.627732
+    },
+    "GM502B_mean": {
+        "a": 19.955665,
+        "b": -1.258358,
+        "intercept": -204.438225
+    },
+    "GM702B_mean": {
+        "a": 30.420428,
+        "b": 11.925671,
+        "intercept": -1088.218523
+    }
+}
 
 # Function to read port from JSON file
 def read_port_from_file():
@@ -85,10 +108,8 @@ class ENoseApp(App):
     CSS_PATH = "enose_app.css"
     project_name = reactive("")
     treatment_name = reactive("")
-    run_count = reactive(0)
     reading_thread = None
     stop_flag = threading.Event()
-    pause_flag = threading.Event()
     x_data = []
     y_data = []
     SERIAL_PORT = find_working_port()
@@ -141,13 +162,13 @@ class ENoseApp(App):
         else:
             log.write_line(f"📄 Exists: {os.path.abspath(CONTROL_CSV_FILE)}")
 
-        # Check and create CORRECTION_CSV_FILE
-        if not os.path.exists(CORRECTION_CSV_FILE):
-            with open(CORRECTION_CSV_FILE, 'w') as f:
-                f.write("sensor,a,b,intercept,treatment,timestamp\n")
-            log.write_line(f"✅ Created: {os.path.abspath(CORRECTION_CSV_FILE)}")
+        # Check and create CALIBRATION_JSON
+        if not os.path.exists(CALIBRATION_JSON_PATH):
+            with open(CALIBRATION_JSON_PATH, 'w') as f:
+                json.dump(DEFAULT_COEFFICIENTS, f, indent=4)
+            log.write_line(f"✅ Created default calibration: {os.path.abspath(CALIBRATION_JSON_PATH)}")
         else:
-            log.write_line(f"📄 Exists: {os.path.abspath(CORRECTION_CSV_FILE)}")
+            log.write_line(f"📄 Exists: {os.path.abspath(CALIBRATION_JSON_PATH)}")
 
     def is_serial_port_available(self, port):
         try:
@@ -196,7 +217,6 @@ class ENoseApp(App):
                 project_label.styles.bold = True
                 self.query_one("#project_box", Container).mount(project_label)
     
-
     def send_command(self, ser, command):
         log = self.query_one("#reading_log", Log)
         """Sends a command to the serial device."""
@@ -319,7 +339,11 @@ class ENoseApp(App):
                         for i, v in enumerate(gas_values):
                             f = final_values[i]
                             sensor = sensor_labels[i]
-                            a, b, intercept = correction_coeffs.get(sensor, (0, 0, 0))
+                            coeff = correction_coeffs.get(sensor, {"a": 0, "b": 0, "intercept": 0})
+                            a = coeff["a"]
+                            b = coeff["b"]
+                            intercept = coeff["intercept"]
+                            correction = a * temperature + b * humidity
                             correction = a * temperature + b * humidity
                             baseline = f + correction
                             adjusted = v - baseline
@@ -357,42 +381,24 @@ class ENoseApp(App):
             if ser and ser.is_open:
                 ser.close()
 
-    def get_env_correction_coefficients(self, control_csv=CONTROL_CSV_FILE):
+    def get_env_correction_coefficients(self):
         log = self.query_one("#reading_log", Log)
         try:
-            df = pd.read_csv(control_csv)
-            df = df.dropna()
+            # Read the calibration coefficients from the JSON file
+            with open(CALIBRATION_JSON_PATH, 'r') as f:
+                coefficients_data = json.load(f)
 
-            voc_sensors = ['GM102B_mean', 'GM302B_mean',
-                        'GM502B_mean', 'GM702B_mean']
-            temp_col = 'temperature_mean'
-            hum_col = 'humidity_mean'
-
-            coefficients = {}
-
-            latest_treatment = df['treatment'].iloc[-1] if 'treatment' in df.columns else 'unknown'
-            latest_timestamp = df['timestamp'].iloc[-1] if 'timestamp' in df.columns else time.time()
-
-            for sensor in voc_sensors:
-                X = df[[temp_col, hum_col]]
-                y = df[sensor]
-                model = LinearRegression().fit(X, y)
-                a = model.coef_[0]
-                b = model.coef_[1]
-                intercept = model.intercept_
-                coefficients[sensor] = (a, b, intercept)
-
+            # Log the coefficients for each sensor
+            for sensor, values in coefficients_data.items():
+                a = values["a"]
+                b = values["b"]
+                intercept = values["intercept"]
                 log.write_line(f"{sensor} -> a: {a:.4f}, b: {b:.4f}, intercept: {intercept:.4f}")
 
-                # Save to CSV
-                with open(CORRECTION_CSV_FILE, 'a') as f:
-                    f.write(
-                        f"{sensor},{a:.6f},{b:.6f},{intercept:.6f},{latest_treatment},{latest_timestamp}\n")
-
-            return coefficients
+            return coefficients_data
 
         except Exception as e:
-            log.write_line(f"Error during regression analysis: {e}")
+            log.write_line(f"Error reading calibration JSON: {e}")
             return {}
 
     def run_enose_capture_template(self, treatment_input=None, record_control_air=False):
@@ -404,6 +410,8 @@ class ENoseApp(App):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         log = self.query_one("#reading_log", Log)
         run_button = self.query_one("#run_button", Button)
+        run_input = self.query_one("#run_input", Static)
+        run_val = int(str(run_input.renderable).strip())
         
         if event.button.id == "run_button":
             if not self.reading_thread or not self.reading_thread.is_alive():
@@ -423,15 +431,14 @@ class ENoseApp(App):
                     return
                 
                 # Check if a run count is set
-                if not self.run_count > 0:
+                if not run_val > 0:
                     log.write_line("❌ Please set a number of runs greater than 0.")
                     return
                 
                 # START: Begin new capture
-                log.write_line(f"▶ Starting e-nose with the treatment name: {self.treatment_name} under the project: {self.project_name}, cycles: {self.run_count}")
+                log.write_line(f"▶ Starting e-nose with the treatment name: {self.treatment_name} under the project: {self.project_name}, cycles: {run_val}")
                 self.stop_flag.clear()
-                self.pause_flag.clear()
-                run_button.label = "Pause"
+                run_button.label = "Running..."
 
                 self.reading_thread = threading.Thread(
                     target=self.run_enose_capture,
@@ -439,20 +446,10 @@ class ENoseApp(App):
                     daemon=True
                 )
                 self.reading_thread.start()
-
             else:
-                # TOGGLE: Pause or Resume
-                if self.pause_flag.is_set():
-                    self.pause_flag.clear()
-                    run_button.label = "Pause"
-                    log.write_line("▶ Resumed readings.")
-                else:
-                    self.pause_flag.set()
-                    run_button.label = "Resume"  # ← previously "Start"
-                    log.write_line("⏸ Paused readings.")
+                log.write_line("⚠️ Measurement is already running. Please wait for it to finish or cancel it.")
 
         elif event.button.id == "cancel_button":
-            self.stop_flag.set()
             log.write_line("❌ Measurement schedule cancelled.")
             self.query_one("#run_button", Button).label = "Start"
 
@@ -461,16 +458,10 @@ class ENoseApp(App):
             self.exit()
         
         elif event.button.id == "inc_button":
-            run_input = self.query_one("#run_input", Static)
-            val = int(str(run_input.renderable).strip())
-            run_input.update(str(val + 1))
-            self.run_count = val
+            run_input.update(str(run_val + 1))
 
         elif event.button.id == "dec_button":
-            run_input = self.query_one("#run_input", Static)
-            val = int(str(run_input.renderable).strip())
-            run_input.update(str(max(val - 1, 0)))
-            self.run_count = val
+            run_input.update(str(max(run_val - 1, 0)))
         
         elif event.button.id == "scan_button":
             log.write_line("🔍 Scanning for available serial ports...")
@@ -634,14 +625,16 @@ class ENoseApp(App):
         
     def run_enose_capture(self, treatment_base_name="auto", record_control_air=False):
         log = self.query_one("#reading_log", Log)
-        num_cycles = self.run_count
-        while self.run_count > 0 and not self.stop_flag.is_set():
+        run_input = self.query_one("#run_input", Static)
+        run_val = int(str(run_input.renderable).strip())
+        num_cycles = run_val
+        while run_val > 0 and not self.stop_flag.is_set():
             # Generate unique treatment name using timestamp
             time_str = time.strftime("%Y%m%d_%H%M%S")
             treatment_name = f"{treatment_base_name}_{time_str}"
-            self.run_count -= 1
-            self.query_one("#run_input", Static).update(str(self.run_count))
-            cycle = num_cycles - self.run_count
+            run_val -= 1
+            self.query_one("#run_input", Static).update(str(run_val))
+            cycle = num_cycles - run_val
             log.write_line(f"\n>>> Starting capture {cycle}/{num_cycles}: {treatment_name}")
             # Run one capture
             capture_thread = threading.Thread(
@@ -661,18 +654,16 @@ class ENoseApp(App):
             if self.stop_flag.is_set():
                 break
             log = self.query_one("#reading_log", Log)
-            log.write_line(f"Cycle {cycle + 1}/{self.run_count}: collecting readings...")
+            log.write_line(f"Cycle {cycle}/{num_cycles}: collecting readings...")
             self.x_data = []
             self.y_data = []
 
-            log.write_line(f"Cycle {cycle + 1} complete.\n")
-            if cycle < self.run_count - 1 and not self.stop_flag.is_set():
+            log.write_line(f"Cycle {cycle} complete.\n")
+            if cycle < num_cycles - 1 and not self.stop_flag.is_set():
                 log.write_line("Waiting for next cycle...\n")
                 for t in range(3):  # use short delay for demo
                     if self.stop_flag.is_set():
                         break
-                    while self.pause_flag.is_set():
-                        time.sleep(0.1)
                     time.sleep(1)
         if not self.stop_flag.is_set():
             self.query_one("#reading_log", Log).write("✅ All cycles complete.")
