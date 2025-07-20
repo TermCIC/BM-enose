@@ -64,6 +64,10 @@ Screen {
     min-width: 25%;
 }
 
+#update_plot_button {
+    min-width: 100%;
+}
+
 #export_data_button {
     min-width: 100%;
 }

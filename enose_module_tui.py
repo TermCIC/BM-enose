@@ -134,6 +134,7 @@ class ENoseApp(App):
                         yield Button("Cancel", id="cancel_button")
                         yield Button("Exit", id="exit_button")
                 with Container(id="plot_box"):
+                    yield Button("Update Plot", id="update_plot_button")
                     yield PlotWidget(id="plot")
             with Container(id="middle_panel"):
                 yield Button("Export data", id="export_data_button")
@@ -361,7 +362,6 @@ class ENoseApp(App):
                         log.write_line(f"Sample {sample_count}/100: {full_reading}")
                         with open(READING_CSV_FILE, 'a') as f:
                             f.write(",".join(map(str, full_reading)) + f",{treatment},{timestamp},{sample_count}\n")
-                        self.call_from_thread(self.update_plot)
 
                 if now - last_valid_time > 5:
                     log.write_line("⚠ No signal for 5 seconds during sample. Reopening serial...")
@@ -474,7 +474,11 @@ class ENoseApp(App):
                     log.write_line(f"❌ Serial port {self.SERIAL_PORT} is currently in use or unavailable.")
             else:
                 log.write_line("❌ No serial port found. Please check your connection.")
-                
+        
+        elif event.button.id == "update_plot_button":
+            log.write_line("🔍 Plotting data...Done.")
+            self.update_plot()
+            
         elif event.button.id == "confirm_project":
             project_input = self.query_one("#project_input", Input)
             self.project_name = project_input.value.strip()
